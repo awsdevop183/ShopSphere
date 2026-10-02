@@ -1,0 +1,80 @@
+# ShopSphere training environment.
+# Security posture: binds to localhost only, runs non-root, drops capabilities,
+# applies resource limits, mounts no host paths or the Docker socket, and places
+# vulnerable services on an isolated network with NO outbound internet access.
+# LAN exposure requires deliberately editing the published host interface below.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shopsphere
+      POSTGRES_PASSWORD: shopsphere_dev
+      POSTGRES_DB: shopsphere
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [lab-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopsphere -d shopsphere"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    build: { context: ., dockerfile: apps/business-api/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql://shopsphere:shopsphere_dev@db:5432/shopsphere?schema=public
+      SESSION_JWT_SECRET: ${SESSION_JWT_SECRET:-change-me-in-production}
+      PORT: "4000"
+      BIND_HOST: "0.0.0.0"
+      LABS_ENABLED: "true"
+      NODE_ENV: production
+      STOREFRONT_ORIGIN: http://127.0.0.1:8080
+    depends_on:
+      db: { condition: service_healthy }
+    # Bind to localhost on the host — NOT 0.0.0.0 — to avoid public exposure.
+    ports: ["127.0.0.1:4000:4000"]
+    networks: [lab-net]
+    user: "node"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: false
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 256
+
+  web:
+    build: { context: ., dockerfile: apps/storefront/Dockerfile }
+    depends_on: [api]
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [lab-net]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+networks:
+  # internal: true cuts outbound internet for everything on this network,
+  # enforcing the "no outbound from vulnerable services" boundary.
+  lab-net:
+    internal: true
+
+volumes:
+  db-data:
