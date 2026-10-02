@@ -1,0 +1,33 @@
+{
+  "name": "shopsphere",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ShopSphere — intentionally vulnerable e-commerce platform for hands-on web application security training.",
+  "license": "SEE docs/RESPONSIBLE_USE.md",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "api": "pnpm --filter @shopsphere/business-api dev",
+    "web": "pnpm --filter @shopsphere/storefront dev",
+    "db:migrate": "pnpm --filter @shopsphere/business-api db:migrate",
+    "db:seed": "pnpm --filter @shopsphere/business-api db:seed",
+    "db:reset": "pnpm --filter @shopsphere/business-api db:reset",
+    "test": "pnpm --filter @shopsphere/business-api test",
+    "build": "pnpm -r build",
+    "dev": "concurrently -n api,web -c blue,green \"pnpm api\" \"pnpm web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "prisma",
+      "@prisma/engines",
+      "esbuild"
+    ]
+  }
+}

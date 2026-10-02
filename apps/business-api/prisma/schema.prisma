@@ -1,0 +1,322 @@
+// ShopSphere data model.
+// Trusted platform data (users, orders, labs, findings) lives here.
+// Vulnerable lab scenarios operate ONLY on seeded synthetic data in this same
+// database; isolation is enforced at the handler/network layer, not by a second DB.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+  INSTRUCTOR
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum CouponState {
+  ACTIVE
+  EXPIRED
+  DISABLED
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String
+  // Legacy plaintext column used ONLY by an isolated crypto-failure lab fixture.
+  legacyPassword String?
+  role           Role      @default(CUSTOMER)
+  firstName      String
+  lastName       String
+  emailVerified  Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  profile    CustomerProfile?
+  addresses  Address[]
+  orders     Order[]
+  reviews    Review[]
+  cart       Cart?
+  wishlist   WishlistItem[]
+  tickets    SupportTicket[]
+  sessions   Session[]
+  findings   StudentFinding[]
+  @@index([role])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  @@index([userId])
+}
+
+model CustomerProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone       String?
+  storeCredit Decimal @default(0) @db.Decimal(10, 2)
+  loyaltyTier String  @default("bronze")
+}
+
+model Address {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String
+  line1     String
+  line2     String?
+  city      String
+  region    String
+  postal    String
+  country   String
+  isDefault Boolean @default(false)
+  @@index([userId])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  blurb    String
+  products Product[]
+}
+
+model Product {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  name        String
+  description String
+  price       Decimal        @db.Decimal(10, 2)
+  compareAt   Decimal?       @db.Decimal(10, 2)
+  rating      Float          @default(0)
+  featured    Boolean        @default(false)
+  categoryId  String
+  category    Category       @relation(fields: [categoryId], references: [id])
+  images      ProductImage[]
+  inventory   Inventory?
+  reviews     Review[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime       @default(now())
+  @@index([categoryId])
+  @@index([slug])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String
+  position  Int     @default(0)
+}
+
+model Inventory {
+  id        String  @id @default(cuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stock     Int     @default(0)
+  reserved  Int     @default(0)
+  version   Int     @default(0)
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  number      String      @unique
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      OrderStatus @default(PENDING)
+  subtotal    Decimal     @db.Decimal(10, 2)
+  discount    Decimal     @default(0) @db.Decimal(10, 2)
+  shipping    Decimal     @default(0) @db.Decimal(10, 2)
+  total       Decimal     @db.Decimal(10, 2)
+  couponCode  String?
+  shipTo      String
+  createdAt   DateTime    @default(now())
+  items       OrderItem[]
+  payment     PaymentSimulation?
+  @@index([userId])
+  @@index([number])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  unitPrice Decimal @db.Decimal(10, 2)
+  quantity  Int
+}
+
+model PaymentSimulation {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method    String
+  last4     String
+  amount    Decimal  @db.Decimal(10, 2)
+  status    String   @default("captured")
+  createdAt DateTime @default(now())
+}
+
+model Coupon {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  description String
+  percentOff  Int         @default(0)
+  amountOff   Decimal     @default(0) @db.Decimal(10, 2)
+  state       CouponState @default(ACTIVE)
+  maxRedemptions Int      @default(0)
+  redemptions Int         @default(0)
+  expiresAt   DateTime?
+}
+
+model Promotion {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  active    Boolean  @default(true)
+  startsAt  DateTime @default(now())
+  endsAt    DateTime?
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  rating     Int
+  title      String
+  body       String
+  approved   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  @@index([productId])
+}
+
+model WishlistItem {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  @@unique([userId, productId])
+}
+
+model SupportTicket {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  subject   String
+  status    TicketStatus    @default(OPEN)
+  createdAt DateTime        @default(now())
+  messages  SupportMessage[]
+  @@index([userId])
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    String
+  body      String
+  createdAt DateTime      @default(now())
+}
+
+// ---- Instructor / training platform (trusted, never intentionally vulnerable) ----
+
+model Lab {
+  id          String    @id
+  title       String
+  category    String
+  difficulty  String
+  summary     String
+  active      Boolean   @default(true)
+  instances   LabInstance[]
+  findings    StudentFinding[]
+}
+
+model LabInstance {
+  id        String   @id @default(cuid())
+  labId     String
+  lab       Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  secureMode Boolean @default(false)
+  resetAt   DateTime @default(now())
+}
+
+model StudentFinding {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  labId       String?
+  lab         Lab?     @relation(fields: [labId], references: [id])
+  title       String
+  endpoint    String
+  category    String
+  severity    String
+  steps       String
+  impact      String
+  remediation String
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([userId])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  target    String
+  meta      String?
+  createdAt DateTime @default(now())
+  @@index([action])
+}
