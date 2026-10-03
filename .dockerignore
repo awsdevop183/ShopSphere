@@ -2,5 +2,6 @@
 **/dist
 **/.vite
 **/coverage
+**/.env
 .git
 *.log
