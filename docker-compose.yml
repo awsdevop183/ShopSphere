@@ -67,7 +67,8 @@ services:
     # inbound rule for port 8080 to trusted source IPs; never leave it on
     # 0.0.0.0/0 on the public internet.
     ports: ["${WEB_BIND:-0.0.0.0}:8080:8080"]
-    networks: [lab-net]
+    # edge = reachable from the host (published port); lab-net = reach the API.
+    networks: [edge, lab-net]
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
     deploy:
@@ -77,8 +78,12 @@ services:
           memory: 128M
 
 networks:
-  # internal: true cuts outbound internet for everything on this network,
-  # enforcing the "no outbound from vulnerable services" boundary.
+  # edge: a normal bridge so the web container's published port is reachable
+  # from the host (incl. the EC2 public IP). Only the web service joins it.
+  edge: {}
+  # lab-net: internal (no outbound) — isolates the intentionally vulnerable API
+  # and the database. A published port on an internal-only network is NOT
+  # reachable from the host, which is why web also sits on `edge`.
   lab-net:
     internal: true
 
