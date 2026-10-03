@@ -72,8 +72,9 @@ Open http://127.0.0.1:5173.
 
 ## Accessing a deployment (incl. EC2 public IP)
 
-By default both services bind to `127.0.0.1`, so only the Docker host can reach
-them. You only ever expose **port 8080** — nginx serves the UI and proxies
+The web service binds to **all interfaces by default** (`0.0.0.0`), so it is
+reachable on the host's private and public IP; the API stays internal. Set
+`WEB_BIND=127.0.0.1` for a localhost-only deployment. You only ever expose **port 8080** — nginx serves the UI and proxies
 `/api` + `/labs` to the API internally (same-origin, so no CORS changes needed).
 Keep the API port (4000) private.
 
@@ -85,8 +86,8 @@ ssh -L 8080:127.0.0.1:8080 <user>@<ec2-host>
 
 **Expose on the EC2 public IP (trusted, access-restricted lab only):**
 ```bash
-# 1. Bind the web service to all interfaces
-WEB_BIND=0.0.0.0 docker compose up -d --build
+# 1. Start it (web binds to 0.0.0.0 by default now)
+docker compose up -d --build
 
 # 2. EC2 security group: add ONE inbound rule
 #    Type: Custom TCP | Port: 8080 | Source: <your-ip>/32   (NOT 0.0.0.0/0)

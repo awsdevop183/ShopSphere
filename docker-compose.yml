@@ -60,11 +60,13 @@ services:
   web:
     build: { context: ., dockerfile: apps/storefront/Dockerfile }
     depends_on: [api]
-    # Localhost-only by default. To expose on a host interface (e.g. an EC2
-    # public IP for a trusted, access-restricted lab), set WEB_BIND=0.0.0.0.
-    # NEVER do this with an open security group — this app is intentionally
-    # vulnerable. Restrict the inbound rule to your own IP.
-    ports: ["${WEB_BIND:-127.0.0.1}:8080:8080"]
+    # Binds to ALL interfaces by default, so the storefront is reachable on the
+    # host's private AND public IP (e.g. an EC2 public IP). For a localhost-only
+    # deployment set WEB_BIND=127.0.0.1.
+    # ⚠️ This app is intentionally vulnerable — restrict the EC2 security-group
+    # inbound rule for port 8080 to trusted source IPs; never leave it on
+    # 0.0.0.0/0 on the public internet.
+    ports: ["${WEB_BIND:-0.0.0.0}:8080:8080"]
     networks: [lab-net]
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
