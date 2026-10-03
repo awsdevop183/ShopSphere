@@ -70,6 +70,36 @@ Open http://127.0.0.1:5173.
 
 (All 30 seeded customers use `<firstname>@example.test` / `Customer!Pass1`.)
 
+## Accessing a deployment (incl. EC2 public IP)
+
+By default both services bind to `127.0.0.1`, so only the Docker host can reach
+them. You only ever expose **port 8080** — nginx serves the UI and proxies
+`/api` + `/labs` to the API internally (same-origin, so no CORS changes needed).
+Keep the API port (4000) private.
+
+**Recommended (safe): SSH tunnel** — nothing is opened publicly:
+```bash
+ssh -L 8080:127.0.0.1:8080 <user>@<ec2-host>
+# then browse http://127.0.0.1:8080 on your laptop
+```
+
+**Expose on the EC2 public IP (trusted, access-restricted lab only):**
+```bash
+# 1. Bind the web service to all interfaces
+WEB_BIND=0.0.0.0 docker compose up -d --build
+
+# 2. EC2 security group: add ONE inbound rule
+#    Type: Custom TCP | Port: 8080 | Source: <your-ip>/32   (NOT 0.0.0.0/0)
+
+# 3. Browse
+http://<ec2-public-ip>:8080
+```
+
+> ⚠️ ShopSphere is **intentionally vulnerable**. Never use `0.0.0.0/0` as the
+> source, never put it behind a public domain, and shut it down when the class
+> ends. Restrict the security group to your own IP, and prefer the SSH tunnel.
+> EC2 public IPs change on stop/start unless you attach an Elastic IP.
+
 ## Run with Docker Compose
 
 ```bash
